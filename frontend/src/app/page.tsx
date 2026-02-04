@@ -8,7 +8,26 @@ import { diagnose, geocodeAddress, type DiagnoseResponse } from "@/lib/api";
 
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 
-const DEFAULT_CENTER: [number, number] = [35.6812, 139.7671]; // 東京駅
+const DEFAULT_CENTER: [number, number] = [35.7100, 139.8300]; // 東京東部
+
+const HOTSPOTS = [
+  { name: "足立区綾瀬", lat: 35.7620, lng: 139.8270, risk: 54.1, arv: 2.45, tag: "旧河道" },
+  { name: "葛飾区新小岩", lat: 35.7161, lng: 139.8581, risk: 54.1, arv: 2.51, tag: "三角州" },
+  { name: "墨田区京島", lat: 35.7170, lng: 139.8180, risk: 53.6, arv: 2.55, tag: "三角州" },
+  { name: "足立区梅島", lat: 35.7750, lng: 139.7950, risk: 52.8, arv: 2.55, tag: "三角州" },
+  { name: "江東区大島", lat: 35.6870, lng: 139.8340, risk: 52.7, arv: 2.32, tag: "干拓地" },
+  { name: "江東区北砂", lat: 35.6760, lng: 139.8350, risk: 51.9, arv: 2.04, tag: "干拓地" },
+  { name: "葛飾区青戸", lat: 35.7540, lng: 139.8510, risk: 51.6, arv: 1.94, tag: "三角州" },
+  { name: "足立区西新井", lat: 35.7810, lng: 139.7810, risk: 51.3, arv: 2.49, tag: "自然堤防" },
+  { name: "葛飾区金町", lat: 35.7680, lng: 139.8710, risk: 50.8, arv: 1.84, tag: "自然堤防" },
+  { name: "墨田区向島", lat: 35.7220, lng: 139.8090, risk: 50.0, arv: 2.22, tag: "三角州" },
+  { name: "荒川区町屋", lat: 35.7430, lng: 139.7810, risk: 49.5, arv: 2.56, tag: "三角州" },
+  { name: "江戸川区葛西", lat: 35.6590, lng: 139.8710, risk: 47.5, arv: 2.72, tag: "干拓地" },
+  { name: "中央区月島", lat: 35.6622, lng: 139.7833, risk: 54.0, arv: 1.65, tag: "埋立地" },
+  { name: "千代田区丸の内", lat: 35.6812, lng: 139.7671, risk: 43.4, arv: 1.27, tag: "干拓地" },
+  { name: "大阪市中之島", lat: 34.6937, lng: 135.5023, risk: 32.6, arv: 1.44, tag: "砂州" },
+  { name: "名古屋市三の丸", lat: 35.1815, lng: 136.9066, risk: 37.4, arv: 1.30, tag: "砂礫質台地" },
+];
 
 export default function Home() {
   const [center] = useState<[number, number]>(DEFAULT_CENTER);
@@ -101,16 +120,42 @@ export default function Home() {
           {result ? (
             <RiskPanel data={result} />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
-              <p className="text-4xl mb-4">&#x1F50D;</p>
-              <p className="text-sm">
-                住所を検索するか、
-                <br />
-                地図をクリックして診断を開始
-              </p>
-              <p className="text-xs mt-2 text-gray-600">
-                対象: 東京23区・大阪・名古屋
-              </p>
+            <div className="flex flex-col h-full">
+              <div className="text-center py-4 border-b border-[var(--card-border)]">
+                <p className="text-sm text-gray-400">
+                  住所を検索 / 地図をクリック / 下のリストから選択
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-1 py-3">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-2">
+                    High Risk Locations
+                  </h3>
+                  <div className="space-y-1.5">
+                    {HOTSPOTS.map((h) => (
+                      <button
+                        key={h.name}
+                        onClick={() => runDiagnose(h.lat, h.lng)}
+                        disabled={loading}
+                        className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--card-bg)] border border-transparent hover:border-[var(--card-border)] transition-all group disabled:opacity-50"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium group-hover:text-white">{h.name}</span>
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                            h.risk >= 50 ? "bg-red-900/50 text-red-400" : "bg-yellow-900/40 text-yellow-400"
+                          }`}>
+                            {h.risk}
+                          </span>
+                        </div>
+                        <div className="flex gap-3 mt-1 text-[10px] text-gray-500">
+                          <span>ARV {h.arv.toFixed(2)}</span>
+                          <span>{h.tag}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </aside>
