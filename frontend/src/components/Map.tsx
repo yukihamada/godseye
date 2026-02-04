@@ -20,6 +20,7 @@ L.Marker.prototype.options.icon = defaultIcon;
 interface MapProps {
   center: [number, number];
   marker: [number, number] | null;
+  flyTo?: { center: [number, number]; zoom: number } | null;
   onMapClick: (lat: number, lng: number) => void;
 }
 
@@ -39,17 +40,17 @@ function MapEvents({ onMapClick }: { onMapClick: (lat: number, lng: number) => v
   return null;
 }
 
-function FlyTo({ center }: { center: [number, number] }) {
+function FlyTo({ center, zoom = 16 }: { center: [number, number]; zoom?: number }) {
   const map = useMap();
 
   useEffect(() => {
-    map.flyTo(center, 16, { duration: 1.5 });
-  }, [map, center]);
+    map.flyTo(center, zoom, { duration: 1.5 });
+  }, [map, center, zoom]);
 
   return null;
 }
 
-export default function Map({ center, marker, onMapClick }: MapProps) {
+export default function Map({ center, marker, flyTo, onMapClick }: MapProps) {
   return (
     <MapContainer center={center} zoom={12} className="h-full w-full rounded-lg">
       <TileLayer
@@ -57,9 +58,12 @@ export default function Map({ center, marker, onMapClick }: MapProps) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapEvents onMapClick={onMapClick} />
+      {flyTo && !marker && (
+        <FlyTo center={flyTo.center} zoom={flyTo.zoom} />
+      )}
       {marker && (
         <>
-          <FlyTo center={marker} />
+          <FlyTo center={marker} zoom={17} />
           <Marker position={marker}>
             <Popup>
               {marker[0].toFixed(6)}, {marker[1].toFixed(6)}
