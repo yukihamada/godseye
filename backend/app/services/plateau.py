@@ -97,24 +97,50 @@ async def get_plateau_data(lat: float, lng: float) -> PlateauResult:
 async def _fallback_reverse_geocode(
     client: httpx.AsyncClient, lat: float, lng: float
 ) -> PlateauResult:
-    """PLATEAU非対応エリア用: 国土地理院の逆ジオコーディングで住所を取得する。"""
+    """PLATEAU非対応エリア用: 逆ジオコーディングで住所を取得する。"""
     try:
-        url = "https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress"
-        params = {"lat": lat, "lon": lng}
-        resp = await client.get(url, params=params)
-        if resp.status_code != 200:
-            return PlateauResult()
+        # 1. GSI逆ジオコーディング（町名レベル）
+        gsi_url = "https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress"
+        gsi_resp = await client.get(gsi_url, params={"lat": lat, "lon": lng})
+        lv01Nm = ""
+        if gsi_resp.status_code == 200:
+            results = gsi_resp.json().get("results", {})
+            lv01Nm = results.get("lv01Nm", "")
 
-        data = resp.json()
-        results = data.get("results", {})
-        muniCd = results.get("mupiCd", "")
-        lv01Nm = results.get("lv01Nm", "")
-
-        # 市区町村名を構築
-        city_name = lv01Nm if lv01Nm else None
+        # 2. Nominatim逆ジオコーディング（市区町村名）
+        nom_url = "https://nominatim.openstreetmap.org/reverse"
+        nom_params = {
+            "format": "json",
+            "lat": lat,
+            "lon": lng,
+            "zoom": 10,
+            "addressdetails": 1,
+        }
+        nom_resp = await client.get(
+            nom_url,
+            params=nom_params,
+            headers={"User-Agent": "GodsEye/1.0"},
+        )
+        city_name = None
+        full_address = None
+        if nom_resp.status_code == 200:
+            nom_data = nom_resp.json()
+            addr = nom_data.get("address", {})
+            city_name = (
+                addr.get("city")
+                or addr.get("town")
+                or addr.get("village")
+                or addr.get("county")
+            )
+            # 都道府県 + 市区町村 + 町名
+            prefecture = addr.get("province") or addr.get("state", "")
+            if prefecture and city_name and lv01Nm:
+                full_address = f"{prefecture}{city_name}{lv01Nm}"
+            elif city_name and lv01Nm:
+                full_address = f"{city_name}{lv01Nm}"
 
         return PlateauResult(
-            address=lv01Nm if lv01Nm else None,
+            address=full_address or lv01Nm or None,
             city_name=city_name,
         )
     except Exception:

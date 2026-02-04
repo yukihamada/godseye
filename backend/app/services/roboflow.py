@@ -32,6 +32,7 @@ MODELS = [
 # クラス名の日本語マッピング
 CLASS_NAME_JA: dict[str, str] = {
     # damage model
+    "0": "損傷なし",
     "1": "軽微損傷",
     "2": "中度損傷",
     "3": "重度損傷",
