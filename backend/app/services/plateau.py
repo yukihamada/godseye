@@ -1,6 +1,7 @@
 """PLATEAU 3D Tiles連携 — b3dmタイルから最寄りの建物を特定する。"""
 
 import json
+import logging
 import math
 import re
 import struct
@@ -9,6 +10,8 @@ from typing import Any
 import httpx
 
 from app.models.schemas import PlateauResult
+
+logger = logging.getLogger(__name__)
 
 # 3D Tiles ベースURL
 TILES_BASE = "https://plateau.geospatial.jp/main/data/3d-tiles/bldg"
@@ -83,6 +86,8 @@ async def get_plateau_data(lat: float, lng: float) -> PlateauResult:
                 if best and best.get("distance_m", float("inf")) < best_distance:
                     best_distance = best["distance_m"]
                     best["city_name"] = city_name
+                    best["city_code"] = city_info.get("city_code")
+                    best["tiles_url"] = tileset_url
                     best_result = _to_result(best)
 
             if best_result and best_result.building_id:
@@ -90,7 +95,8 @@ async def get_plateau_data(lat: float, lng: float) -> PlateauResult:
 
             return PlateauResult(city_name=last_city_name)
 
-    except Exception:
+    except Exception as e:
+        logger.warning(f"PLATEAU data fetch failed: {e}")
         return PlateauResult()
 
 
@@ -143,7 +149,8 @@ async def _fallback_reverse_geocode(
             address=full_address or lv01Nm or None,
             city_name=city_name,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"PLATEAU data fetch failed: {e}")
         return PlateauResult()
 
 
@@ -438,6 +445,13 @@ def _to_result(b: dict) -> PlateauResult:
                 return v
         return None
 
+    # 建物座標（_x=経度, _y=緯度）
+    building_lat = b.get("_y")
+    building_lng = b.get("_x")
+    if not (isinstance(building_lat, (int, float)) and isinstance(building_lng, (int, float))):
+        building_lat = None
+        building_lng = None
+
     # 高さ
     height = b.get("_height")
     if isinstance(height, (int, float)) and height > 0:
@@ -478,6 +492,8 @@ def _to_result(b: dict) -> PlateauResult:
         building_id=_get("建物ID", "_gml_id"),
         building_name=_get("名称"),
         address=_get("住所"),
+        building_lat=building_lat,
+        building_lng=building_lng,
         year_built=None,  # b3dmにはほとんど含まれない
         structure_type=structure,
         fireproof_type=fireproof,
@@ -487,5 +503,7 @@ def _to_result(b: dict) -> PlateauResult:
         total_floor_area=area,
         usage=_get("用途", "建物利用現況_中分類"),
         city_name=b.get("city_name"),
+        city_code=b.get("city_code"),
         distance_m=b.get("distance_m"),
+        tiles_url=b.get("tiles_url"),
     )

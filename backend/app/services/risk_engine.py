@@ -1,3 +1,5 @@
+import logging
+
 from app.models.schemas import (
     JshisResult,
     PlateauResult,
@@ -5,12 +7,16 @@ from app.models.schemas import (
     RiskResult,
     RoboflowResult,
 )
+from app.services.ml_scorer import predict_collapse_probability
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_risk(
     plateau: PlateauResult,
     jshis: JshisResult,
     roboflow: RoboflowResult | None = None,
+    footprint_area_m2: float | None = None,
 ) -> RiskResult:
     """各データソースの情報を統合しリスクスコアを算出する。"""
     breakdown = RiskBreakdown()
@@ -58,17 +64,54 @@ def calculate_risk(
             min(15, roboflow.damage_score * 0.15), 1
         )
 
-    total = (
+    # ── ルールベーススコア ──
+    rule_score = (
         breakdown.building_age_score
         + breakdown.structure_score
         + breakdown.ground_score
         + breakdown.seismic_prob_score
         + breakdown.visual_damage_score
     )
+    rule_score = min(100, max(0, rule_score))
+
+    # ── ML倒壊確率 ──
+    # footprint_area_m2: PLATEAUの延床面積 or 引数で渡された値
+    area = footprint_area_m2 or plateau.total_floor_area
+
+    jcode_int = None
+    if jshis.micro_topography_code is not None:
+        try:
+            jcode_int = int(jshis.micro_topography_code)
+        except (ValueError, TypeError):
+            pass
+
+    ml_prob = predict_collapse_probability(
+        arv=jshis.amplification_factor,
+        avs=jshis.vs30,
+        jcode=jcode_int,
+        prob_i55=jshis.prob_intensity_6lower_30yr,
+        prob_i60=jshis.prob_intensity_6upper_30yr,
+        footprint_area_m2=area,
+    )
+    breakdown.ml_collapse_prob = ml_prob
+
+    # ── ブレンド ──
+    if ml_prob is not None:
+        ml_score = ml_prob * 100  # 0-1 → 0-100
+        has_plateau = plateau.year_built is not None or plateau.structure_type is not None
+        if has_plateau:
+            # PLATEAU建物データあり → ルールベース重視
+            total = rule_score * 0.6 + ml_score * 0.4
+        else:
+            # PLATEAU建物データなし → ML重視 (建物情報の欠損を補完)
+            total = rule_score * 0.4 + ml_score * 0.6
+    else:
+        total = rule_score
+
     total = min(100, max(0, total))
 
     level = _classify(total)
-    description = _describe(level, plateau, jshis, roboflow)
+    description = _describe(level, plateau, jshis, roboflow, ml_prob)
 
     return RiskResult(
         score=total,
@@ -94,6 +137,7 @@ def _describe(
     plateau: PlateauResult,
     jshis: JshisResult,
     roboflow: RoboflowResult | None = None,
+    ml_prob: float | None = None,
 ) -> str:
     parts = []
 
@@ -122,6 +166,10 @@ def _describe(
 
     if roboflow and roboflow.analyzed and roboflow.damage_detected:
         parts.append(f"AI外観解析: {roboflow.summary}")
+
+    if ml_prob is not None:
+        pct = ml_prob * 100
+        parts.append(f"ML倒壊確率: {pct:.1f}%")
 
     if not parts:
         return f"リスクレベル: {level}（データ不足のため参考値）"

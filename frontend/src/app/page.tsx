@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useState, useCallback, useMemo } from "react";
 import SearchBar from "@/components/SearchBar";
 import RiskPanel from "@/components/RiskPanel";
+import BuildingSelector from "@/components/BuildingSelector";
 import { diagnose, geocodeAddress, type DiagnoseResponse } from "@/lib/api";
 
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
@@ -29,6 +30,9 @@ const HOTSPOTS = [
   { name: "小岩1丁目", area: "江戸川区", lat: 35.7295, lng: 139.8830, risk: 42.7, arv: 1.64, tag: "三角州", desc: "5.9m/68m2" },
 ];
 
+// ステップの型定義
+type Step = "area-select" | "building-select" | "result";
+
 // エリアごとの中心座標とリスク概要
 interface AreaInfo {
   name: string;
@@ -37,6 +41,13 @@ interface AreaInfo {
   avgArv: number;
   count: number;
   spots: typeof HOTSPOTS;
+}
+
+// 建物選択用の状態
+interface SelectedLocation {
+  lat: number;
+  lng: number;
+  address?: string;
 }
 
 function groupByArea(): AreaInfo[] {
@@ -74,8 +85,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
 
+  // 新しい状態: ステップ管理と建物選択
+  const [step, setStep] = useState<Step>("area-select");
+  const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
+
   const areas = useMemo(() => groupByArea(), []);
 
+  // 診断実行
   const runDiagnose = useCallback(async (lat: number, lng: number) => {
     setLoading(true);
     setError(null);
@@ -84,6 +100,7 @@ export default function Home() {
     try {
       const data = await diagnose({ lat, lng });
       setResult(data);
+      setStep("result");
     } catch (e) {
       setError(e instanceof Error ? e.message : "診断に失敗しました");
       setResult(null);
@@ -92,32 +109,53 @@ export default function Home() {
     }
   }, []);
 
+  // 住所検索 → 建物選択画面へ
   const handleSearch = useCallback(async (query: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const coords = await geocodeAddress(query);
-      if (!coords) {
+      const geo = await geocodeAddress(query);
+      if (!geo) {
         setError("住所が見つかりませんでした");
         setLoading(false);
         return;
       }
-      await runDiagnose(coords.lat, coords.lng);
-    } catch {
-      setError("住所検索に失敗しました");
+
+      // 建物選択画面へ遷移
+      setSelectedLocation({
+        lat: geo.lat,
+        lng: geo.lng,
+        address: geo.displayName || query,
+      });
+      setMarker([geo.lat, geo.lng]);
+      setFlyTo({ center: [geo.lat, geo.lng], zoom: 18 });
+      setStep("building-select");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "検索に失敗しました");
+    } finally {
       setLoading(false);
     }
-  }, [runDiagnose]);
+  }, []);
 
+  // 座標検索 → 建物選択画面へ
   const handleCoordinateSearch = useCallback((lat: number, lng: number) => {
-    runDiagnose(lat, lng);
-  }, [runDiagnose]);
+    setSelectedLocation({ lat, lng });
+    setMarker([lat, lng]);
+    setFlyTo({ center: [lat, lng], zoom: 18 });
+    setStep("building-select");
+  }, []);
 
+  // 地図クリック → 建物選択画面へ
   const handleMapClick = useCallback((lat: number, lng: number) => {
-    runDiagnose(lat, lng);
-  }, [runDiagnose]);
+    setSelectedLocation({ lat, lng });
+    setMarker([lat, lng]);
+    setFlyTo({ center: [lat, lng], zoom: 18 });
+    setStep("building-select");
+    setError(null);
+  }, []);
 
+  // エリア選択
   const handleSelectArea = useCallback((area: AreaInfo) => {
     setSelectedArea(area.name);
     setResult(null);
@@ -126,13 +164,58 @@ export default function Home() {
     setFlyTo({ center: area.center, zoom: 15 });
   }, []);
 
-  const handleBack = useCallback(() => {
-    setSelectedArea(null);
-    setResult(null);
-    setMarker(null);
-    setError(null);
-    setFlyTo({ center: DEFAULT_CENTER, zoom: 12 });
+  // ホットスポットから建物選択画面へ
+  const handleSelectHotspot = useCallback((lat: number, lng: number, name: string) => {
+    setSelectedLocation({ lat, lng, address: name });
+    setMarker([lat, lng]);
+    setFlyTo({ center: [lat, lng], zoom: 18 });
+    setStep("building-select");
   }, []);
+
+  // 戻るボタン
+  const handleBack = useCallback(() => {
+    if (step === "result") {
+      // 結果画面から建物選択に戻る
+      if (selectedLocation) {
+        setStep("building-select");
+        setResult(null);
+      } else {
+        setStep("area-select");
+        setSelectedArea(null);
+        setResult(null);
+        setMarker(null);
+        setFlyTo({ center: DEFAULT_CENTER, zoom: 12 });
+      }
+    } else if (step === "building-select") {
+      // 建物選択からエリア選択に戻る
+      setStep("area-select");
+      setSelectedLocation(null);
+      if (selectedArea) {
+        const area = areas.find((a) => a.name === selectedArea);
+        if (area) {
+          setFlyTo({ center: area.center, zoom: 15 });
+        }
+      } else {
+        setMarker(null);
+        setFlyTo({ center: DEFAULT_CENTER, zoom: 12 });
+      }
+    } else {
+      // エリア選択でエリアが選択されている場合
+      setSelectedArea(null);
+      setMarker(null);
+      setFlyTo({ center: DEFAULT_CENTER, zoom: 12 });
+    }
+    setError(null);
+  }, [step, selectedArea, selectedLocation, areas]);
+
+  // 建物選択完了 → 診断実行
+  const handleBuildingSelect = useCallback(
+    (lat: number, lng: number) => {
+      setSelectedLocation((prev) => (prev ? { ...prev, lat, lng } : { lat, lng }));
+      runDiagnose(lat, lng);
+    },
+    [runDiagnose]
+  );
 
   const currentAreaSpots = useMemo(() => {
     if (!selectedArea) return [];
@@ -160,7 +243,7 @@ export default function Home() {
         {/* 地図 */}
         <div className="flex-1 relative">
           <Map center={center} marker={marker} flyTo={flyTo} onMapClick={handleMapClick} />
-          {loading && (
+          {loading && step !== "building-select" && (
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-[1000]">
               <div className="bg-[var(--card-bg)] px-6 py-4 rounded-xl border border-[var(--card-border)] flex items-center gap-3">
                 <div className="w-5 h-5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
@@ -178,20 +261,31 @@ export default function Home() {
             </div>
           )}
 
-          {result ? (
+          {step === "result" && result ? (
+            /* Step 3: 診断結果 */
             <div>
               <button
                 onClick={handleBack}
                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-white px-4 pt-3 pb-1 transition-colors"
               >
-                <span>←</span> エリア一覧に戻る
+                <span>←</span> 建物選択に戻る
               </button>
               <div className="p-4 pt-2">
                 <RiskPanel data={result} />
               </div>
             </div>
+          ) : step === "building-select" && selectedLocation ? (
+            /* Step 2: 建物選択（Street View） */
+            <BuildingSelector
+              lat={selectedLocation.lat}
+              lng={selectedLocation.lng}
+              address={selectedLocation.address}
+              onSelect={handleBuildingSelect}
+              onBack={handleBack}
+              loading={loading}
+            />
           ) : selectedArea ? (
-            /* Step 2: エリア内の建物一覧 */
+            /* Step 1b: エリア内の建物一覧 */
             <div className="flex flex-col h-full">
               <div className="px-4 pt-4 pb-3 border-b border-[var(--card-border)]">
                 <button
@@ -202,7 +296,7 @@ export default function Home() {
                 </button>
                 <h2 className="text-base font-bold">{selectedArea}</h2>
                 <p className="text-xs text-gray-500 mt-1">
-                  建物を選択するか、地図上の家をクリックして診断
+                  建物を選択してStreet Viewで確認
                 </p>
               </div>
               <div className="flex-1 overflow-y-auto px-3 py-3">
@@ -210,7 +304,7 @@ export default function Home() {
                   {currentAreaSpots.map((h) => (
                     <button
                       key={h.name}
-                      onClick={() => runDiagnose(h.lat, h.lng)}
+                      onClick={() => handleSelectHotspot(h.lat, h.lng, `${h.area} ${h.name}`)}
                       disabled={loading}
                       className="w-full text-left px-3 py-3 rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-[var(--accent)]/50 transition-all group disabled:opacity-50"
                     >
@@ -232,18 +326,18 @@ export default function Home() {
                 </div>
                 <div className="mt-4 p-3 rounded-lg border border-dashed border-[var(--card-border)] text-center">
                   <p className="text-xs text-gray-500">
-                    地図をクリックして<br />任意の建物を診断することもできます
+                    地図をクリックして<br />任意の場所を選択することもできます
                   </p>
                 </div>
               </div>
             </div>
           ) : (
-            /* Step 1: エリア選択 */
+            /* Step 1a: エリア選択 */
             <div className="flex flex-col h-full">
               <div className="text-center px-4 py-4 border-b border-[var(--card-border)]">
                 <p className="text-sm font-medium mb-1">地震倒壊リスク診断</p>
                 <p className="text-xs text-gray-500">
-                  エリアを選択 → 建物を選んで診断
+                  ① エリア選択 → ② Street Viewで建物確認 → ③ 診断
                 </p>
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -286,7 +380,7 @@ export default function Home() {
                 </div>
                 <div className="px-4 py-3 border-t border-[var(--card-border)]">
                   <p className="text-[11px] text-gray-600 text-center">
-                    住所検索や地図クリックでも直接診断できます
+                    住所検索や地図クリックでも建物を選択できます
                   </p>
                 </div>
               </div>

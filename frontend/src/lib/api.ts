@@ -1,8 +1,9 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export interface DiagnoseRequest {
-  lat: number;
-  lng: number;
+  lat?: number;
+  lng?: number;
+  address?: string;
 }
 
 export interface RiskResult {
@@ -25,6 +26,8 @@ export interface PlateauResult {
   building_id: string | null;
   building_name: string | null;
   address: string | null;
+  building_lat: number | null;
+  building_lng: number | null;
   year_built: number | null;
   structure_type: string | null;
   fireproof_type: string | null;
@@ -34,13 +37,49 @@ export interface PlateauResult {
   total_floor_area: number | null;
   usage: string | null;
   city_name: string | null;
+  city_code: string | null;
   distance_m: number | null;
+  tiles_url: string | null;
 }
 
 export interface StreetViewResult {
   available: boolean;
   image_urls: string[];
+  image_urls_high: string[];
   pano_id: string | null;
+  pano_lat?: number | null;
+  pano_lng?: number | null;
+  heading_to_building?: number | null;
+}
+
+export interface HistoricalImage {
+  url: string;
+  date: string;
+  pano_id: string;
+}
+
+export interface HistoricalStreetViewResult {
+  available: boolean;
+  images: HistoricalImage[];
+}
+
+export interface PlacePhoto {
+  url: string;
+  attribution: string;
+  place_name: string;
+  place_type: string;
+}
+
+export interface PlacesResult {
+  available: boolean;
+  photos: PlacePhoto[];
+}
+
+export interface AerialPhotoResult {
+  available: boolean;
+  image_url: string | null;
+  zoom: number;
+  source: string;
 }
 
 export interface TellusResult {
@@ -58,6 +97,8 @@ export interface RoboflowPrediction {
   y: number;
   width: number;
   height: number;
+  image_index?: number;
+  source_image_url?: string;
 }
 
 export interface RoboflowResult {
@@ -67,6 +108,18 @@ export interface RoboflowResult {
   damage_score: number;
   summary: string;
   image_url: string | null;
+  analyzed_image_count?: number;
+}
+
+export interface BuildingAgeResult {
+  estimated: boolean;
+  year_built_min: number | null;
+  year_built_max: number | null;
+  confidence: string;
+  first_appearance_layer: string | null;
+  first_appearance_period: string | null;
+  available_layers: string[];
+  method: string | null;
 }
 
 export interface RiskBreakdown {
@@ -75,15 +128,32 @@ export interface RiskBreakdown {
   ground_score: number;
   seismic_prob_score: number;
   visual_damage_score: number;
+  ml_collapse_prob: number | null;
+}
+
+export interface BuildingAgeResult {
+  estimated: boolean;
+  year_built_min: number | null;
+  year_built_max: number | null;
+  confidence: string;
+  first_appearance_layer: string | null;
+  first_appearance_period: string | null;
+  available_layers: string[];
+  method: string | null;
 }
 
 export interface DiagnoseResponse {
   lat: number;
   lng: number;
+  address: string | null;
   risk: RiskResult;
   jshis: JshisResult;
   plateau: PlateauResult;
   streetview: StreetViewResult;
+  streetview_historical: HistoricalStreetViewResult;
+  places: PlacesResult;
+  aerial: AerialPhotoResult;
+  building_age: BuildingAgeResult;
   tellus: TellusResult;
   roboflow: RoboflowResult;
 }
@@ -100,7 +170,7 @@ export async function diagnose(req: DiagnoseRequest): Promise<DiagnoseResponse> 
   return res.json();
 }
 
-export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; displayName?: string } | null> {
   // 国土地理院 住所検索API（日本の番地レベルまで対応）
   const gsiUrl = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;
   const gsiRes = await fetch(gsiUrl);
@@ -108,7 +178,8 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
     const gsiData = await gsiRes.json();
     if (gsiData.length > 0) {
       const [lng, lat] = gsiData[0].geometry.coordinates;
-      return { lat, lng };
+      const displayName = gsiData[0].properties?.title || address;
+      return { lat, lng, displayName };
     }
   }
 
@@ -120,5 +191,17 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
   if (!res.ok) return null;
   const data = await res.json();
   if (data.length === 0) return null;
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  return {
+    lat: parseFloat(data[0].lat),
+    lng: parseFloat(data[0].lon),
+    displayName: data[0].display_name,
+  };
+}
+
+export async function getStreetViewPreview(lat: number, lng: number): Promise<StreetViewResult> {
+  const res = await fetch(`${API_BASE}/api/streetview?lat=${lat}&lng=${lng}`);
+  if (!res.ok) {
+    return { available: false, image_urls: [], image_urls_high: [], pano_id: null };
+  }
+  return res.json();
 }

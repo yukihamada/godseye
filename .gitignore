@@ -19,6 +19,9 @@ out/
 .idea/
 *.swp
 
+# ML training data (large files)
+backend/ml/data/
+
 # OS
 .DS_Store
 Thumbs.db

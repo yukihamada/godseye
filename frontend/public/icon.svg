@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Eye outer shape -->
+  <path d="M32 12C18 12 6 32 6 32s12 20 26 20 26-20 26-20S46 12 32 12z" fill="#1e3a5f" stroke="#0f2847" stroke-width="2"/>
+
+  <!-- Seismic wave circles (radar/monitoring motif) -->
+  <circle cx="32" cy="32" r="16" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="32" cy="32" r="11" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="32" cy="32" r="6" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.8"/>
+
+  <!-- Iris -->
+  <circle cx="32" cy="32" r="12" fill="#2563eb"/>
+
+  <!-- Pupil with alert indicator -->
+  <circle cx="32" cy="32" r="5" fill="#0f172a"/>
+
+  <!-- Light reflection -->
+  <circle cx="29" cy="29" r="2" fill="#fff" opacity="0.8"/>
+
+  <!-- Warning accent (seismic alert indicator) -->
+  <circle cx="32" cy="32" r="2" fill="#ef4444"/>
+</svg>

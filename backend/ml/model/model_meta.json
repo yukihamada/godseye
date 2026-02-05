@@ -1,0 +1,41 @@
+{
+  "model_name": "Model B (deploy)",
+  "features": [
+    "ARV",
+    "AVS",
+    "JCODE",
+    "T30_I55_PS",
+    "T30_I60_PS",
+    "footprint_area_m2",
+    "GSI_fire",
+    "GSI_slope_failure",
+    "GSI_tsunami"
+  ],
+  "categorical_features": [
+    "JCODE"
+  ],
+  "oof_auc": 0.807,
+  "fold_aucs": [
+    0.7064,
+    0.6583,
+    0.7262,
+    0.7609,
+    0.7855
+  ],
+  "best_threshold": 0.6819,
+  "scale_pos_weight": 32.44,
+  "best_iteration": 82,
+  "n_samples": 115736,
+  "n_positive": 3461,
+  "feature_importance": {
+    "ARV": 42440.0,
+    "AVS": 66778.2,
+    "JCODE": 357779.0,
+    "T30_I55_PS": 440148.9,
+    "T30_I60_PS": 126384.2,
+    "footprint_area_m2": 120312.5,
+    "GSI_fire": 52813.6,
+    "GSI_slope_failure": 8543.2,
+    "GSI_tsunami": 44844.0
+  }
+}

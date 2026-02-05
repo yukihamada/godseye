@@ -1,0 +1,8 @@
+# God's Eye - Seismic Risk Diagnosis System
+# https://godseye-web.fly.dev
+
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://godseye-web.fly.dev/sitemap.xml

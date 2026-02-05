@@ -1,0 +1,20 @@
+{
+  "name": "God's Eye - 地震倒壊リスク診断",
+  "short_name": "God's Eye",
+  "description": "AIと政府オープンデータを活用した建物地震倒壊リスク診断システム",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e3a5f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "lang": "ja"
+}

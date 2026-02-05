@@ -1,0 +1,43 @@
+{
+  "model_name": "Model A (with MMI)",
+  "features": [
+    "ARV",
+    "AVS",
+    "JCODE",
+    "T30_I55_PS",
+    "T30_I60_PS",
+    "footprint_area_m2",
+    "GSI_fire",
+    "GSI_slope_failure",
+    "GSI_tsunami",
+    "USGS_MMI"
+  ],
+  "categorical_features": [
+    "JCODE"
+  ],
+  "oof_auc": 0.7856,
+  "fold_aucs": [
+    0.7783,
+    0.6712,
+    0.6445,
+    0.8302,
+    0.7894
+  ],
+  "best_threshold": 0.7134,
+  "scale_pos_weight": 32.44,
+  "best_iteration": 1,
+  "n_samples": 115736,
+  "n_positive": 3461,
+  "feature_importance": {
+    "ARV": 26080.1,
+    "AVS": 30968.1,
+    "JCODE": 190988.4,
+    "T30_I55_PS": 0.0,
+    "T30_I60_PS": 401490.5,
+    "footprint_area_m2": 20357.1,
+    "GSI_fire": 26595.0,
+    "GSI_slope_failure": 0.0,
+    "GSI_tsunami": 22121.2,
+    "USGS_MMI": 0.0
+  }
+}
