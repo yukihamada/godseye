@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 interface BuildingSelectorProps {
   lat: number;
@@ -19,81 +19,34 @@ export default function BuildingSelector({
   onBack,
   loading,
 }: BuildingSelectorProps) {
-  // 現在の表示値
-  const [currentLat, setCurrentLat] = useState(lat);
-  const [currentLng, setCurrentLng] = useState(lng);
-  const [heading, setHeading] = useState(0);
+  // 実際の位置・方向（これが画像URLに使われる）
+  const [displayLat, setDisplayLat] = useState(lat);
+  const [displayLng, setDisplayLng] = useState(lng);
+  const [displayHeading, setDisplayHeading] = useState(0);
 
-  // ターゲット値（スムーズアニメーション用）
+  // ターゲット値（ドラッグ/ボタンで即座に更新）
   const [targetLat, setTargetLat] = useState(lat);
   const [targetLng, setTargetLng] = useState(lng);
   const [targetHeading, setTargetHeading] = useState(0);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, heading: 0, lat: 0, lng: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number | null>(null);
 
-  // スムーズなアニメーション（回転＋位置）
+  // 画像URLを生成（5度単位、位置は小数点5桁で丸める）
+  const roundedHeading = Math.round(displayHeading / 5) * 5;
+  const roundedLat = Math.round(displayLat * 100000) / 100000;
+  const roundedLng = Math.round(displayLng * 100000) / 100000;
+
+  // ターゲット変更時に表示値を更新（デバウンス）
   useEffect(() => {
-    const needsHeadingAnimation = Math.abs(heading - targetHeading) > 0.5 ||
-      (heading > 350 && targetHeading < 10) || (heading < 10 && targetHeading > 350);
-    const needsPositionAnimation =
-      Math.abs(currentLat - targetLat) > 0.000001 ||
-      Math.abs(currentLng - targetLng) > 0.000001;
+    const timer = setTimeout(() => {
+      setDisplayHeading(targetHeading);
+      setDisplayLat(targetLat);
+      setDisplayLng(targetLng);
+    }, 100); // 100msのデバウンス
 
-    if (!needsHeadingAnimation && !needsPositionAnimation) {
-      setIsTransitioning(false);
-      return;
-    }
-
-    const animate = () => {
-      let stillAnimating = false;
-
-      // 方向のアニメーション
-      setHeading((prev) => {
-        let diff = targetHeading - prev;
-        if (diff > 180) diff -= 360;
-        if (diff < -180) diff += 360;
-
-        if (Math.abs(diff) < 1) {
-          return targetHeading;
-        }
-        stillAnimating = true;
-        return (prev + diff * 0.15 + 360) % 360;
-      });
-
-      // 位置のアニメーション
-      setCurrentLat((prev) => {
-        const diff = targetLat - prev;
-        if (Math.abs(diff) < 0.000001) return targetLat;
-        stillAnimating = true;
-        return prev + diff * 0.2;
-      });
-
-      setCurrentLng((prev) => {
-        const diff = targetLng - prev;
-        if (Math.abs(diff) < 0.000001) return targetLng;
-        stillAnimating = true;
-        return prev + diff * 0.2;
-      });
-
-      if (stillAnimating) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        setIsTransitioning(false);
-      }
-    };
-
-    setIsTransitioning(true);
-    animationRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
+    return () => clearTimeout(timer);
   }, [targetHeading, targetLat, targetLng]);
 
   // 位置を移動（スムーズ）
@@ -195,16 +148,13 @@ export default function BuildingSelector({
   }, []);
 
   const handleDiagnose = useCallback(() => {
-    onSelect(currentLat, currentLng);
-  }, [currentLat, currentLng, onSelect]);
+    onSelect(targetLat, targetLng);
+  }, [targetLat, targetLng, onSelect]);
 
-  // Google Maps Embed API URL (APIキー不要で動作)
-  const embedUrl = `https://www.google.com/maps/embed?pb=!4v0!6m8!1m7!1s!2m2!1d${currentLat}!2d${currentLng}!3f${heading}!4f0!5f0.7820865974627469&output=embed`;
-
-  // Street View Static API URL (サムネイル用)
-  const getStaticUrl = (h: number, size: string = "200x150") => {
-    return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${currentLat},${currentLng}&heading=${h}&fov=90&pitch=5&key=AIzaSyCphrzW-o323Ypju5eOiJws2vwYmE5pIkI`;
-  };
+  // Street View Static API URL（丸めた値を使用してキャッシュ効率化）
+  const getStaticUrl = useCallback((h: number, size: string = "200x150") => {
+    return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${roundedLat},${roundedLng}&heading=${h}&fov=90&pitch=5&key=AIzaSyCphrzW-o323Ypju5eOiJws2vwYmE5pIkI`;
+  }, [roundedLat, roundedLng]);
 
   return (
     <div className="flex flex-col h-full">
@@ -234,12 +184,13 @@ export default function BuildingSelector({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* 大きなStreet View画像（スムーズアニメーション） */}
-        <div className={`relative overflow-hidden ${isTransitioning ? "transition-opacity duration-100" : ""}`}>
+        {/* 大きなStreet View画像 */}
+        <div className="relative overflow-hidden">
           <img
-            src={getStaticUrl(Math.round(heading), "640x400")}
+            key={`${roundedLat}-${roundedLng}-${roundedHeading}`}
+            src={getStaticUrl(roundedHeading, "640x400")}
             alt="Street View"
-            className="w-full aspect-[16/10] object-cover"
+            className="w-full aspect-[16/10] object-cover transition-opacity duration-200"
             draggable={false}
           />
           {/* ドラッグ中のオーバーレイ */}
@@ -328,21 +279,21 @@ export default function BuildingSelector({
         {/* コンパスインジケーター */}
         <div className="absolute bottom-2 left-2 bg-black/80 rounded-lg p-2 backdrop-blur-sm flex items-center gap-2">
           <div
-            className="w-6 h-6 rounded-full border border-gray-500 relative"
-            style={{ transform: `rotate(${-heading}deg)` }}
+            className="w-6 h-6 rounded-full border border-gray-500 relative transition-transform duration-200"
+            style={{ transform: `rotate(${-targetHeading}deg)` }}
           >
             <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[6px] border-b-red-500" />
           </div>
           <div className="text-white text-xs">
-            <div className="font-mono">{Math.round(heading)}°</div>
-            <div className="text-[9px] text-gray-400">{currentLat.toFixed(5)}, {currentLng.toFixed(5)}</div>
+            <div className="font-mono">{Math.round(targetHeading)}°</div>
+            <div className="text-[9px] text-gray-400">{targetLat.toFixed(5)}, {targetLng.toFixed(5)}</div>
           </div>
         </div>
       </div>
 
       {/* 8方向サムネイル */}
       <div className="p-3 border-b border-[var(--card-border)]">
-        <p className="text-[10px] text-gray-500 mb-2">クリックで方向を変更（スムーズ回転）</p>
+        <p className="text-[10px] text-gray-500 mb-2">クリックで方向を変更</p>
         <div className="grid grid-cols-4 gap-1.5">
           {[
             { h: 0, label: "北" },
@@ -354,8 +305,8 @@ export default function BuildingSelector({
             { h: 270, label: "西" },
             { h: 315, label: "北西" },
           ].map((dir) => {
-            const isSelected = Math.abs(Math.round(heading) - dir.h) < 23 ||
-              Math.abs(Math.round(heading) - dir.h) > 337;
+            const diff = Math.abs(roundedHeading - dir.h);
+            const isSelected = diff < 23 || diff > 337;
             return (
               <button
                 key={dir.h}
@@ -363,7 +314,7 @@ export default function BuildingSelector({
                 className={`relative rounded overflow-hidden border-2 transition-all duration-200 ${
                   isSelected
                     ? "border-[var(--accent)] ring-1 ring-[var(--accent)] scale-105"
-                    : "border-transparent hover:border-gray-600 hover:scale-102"
+                    : "border-transparent hover:border-gray-600"
                 }`}
               >
                 <img
