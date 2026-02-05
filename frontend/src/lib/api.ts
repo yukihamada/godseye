@@ -131,17 +131,6 @@ export interface RiskBreakdown {
   ml_collapse_prob: number | null;
 }
 
-export interface BuildingAgeResult {
-  estimated: boolean;
-  year_built_min: number | null;
-  year_built_max: number | null;
-  confidence: string;
-  first_appearance_layer: string | null;
-  first_appearance_period: string | null;
-  available_layers: string[];
-  method: string | null;
-}
-
 export interface DiagnoseResponse {
   lat: number;
   lng: number;

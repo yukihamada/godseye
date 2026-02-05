@@ -1,6 +1,8 @@
 import logging
+from datetime import datetime
 
 from app.models.schemas import (
+    BuildingAgeResult,
     JshisResult,
     PlateauResult,
     RiskBreakdown,
@@ -11,21 +13,33 @@ from app.services.ml_scorer import predict_collapse_probability
 
 logger = logging.getLogger(__name__)
 
+CURRENT_YEAR = datetime.now().year
+
 
 def calculate_risk(
     plateau: PlateauResult,
     jshis: JshisResult,
     roboflow: RoboflowResult | None = None,
     footprint_area_m2: float | None = None,
+    building_age: BuildingAgeResult | None = None,
 ) -> RiskResult:
     """各データソースの情報を統合しリスクスコアを算出する。"""
     breakdown = RiskBreakdown()
 
     # 1. 築年数スコア (0-30点)
-    if plateau.year_built:
-        if plateau.year_built < 1981:
+    # PLATEAUの築年データを優先、なければ航空写真推定を使用
+    year_built = plateau.year_built
+    if year_built is None and building_age and building_age.estimated:
+        # 航空写真推定の中央値を使用
+        if building_age.year_built_min and building_age.year_built_max:
+            year_built = (building_age.year_built_min + building_age.year_built_max) // 2
+        elif building_age.year_built_min:
+            year_built = building_age.year_built_min
+
+    if year_built:
+        if year_built < 1981:
             breakdown.building_age_score = 30  # 旧耐震基準
-        elif plateau.year_built < 2000:
+        elif year_built < 2000:
             breakdown.building_age_score = 15  # 新耐震だが現行基準前
         else:
             breakdown.building_age_score = 5
@@ -142,12 +156,13 @@ def _describe(
     parts = []
 
     if plateau.year_built:
+        age = CURRENT_YEAR - plateau.year_built
         if plateau.year_built < 1981:
-            parts.append(f"築{2025 - plateau.year_built}年（1981年以前の旧耐震基準）で耐震性に懸念があります")
+            parts.append(f"築{age}年（1981年以前の旧耐震基準）で耐震性に懸念があります")
         elif plateau.year_built < 2000:
-            parts.append(f"築{2025 - plateau.year_built}年（新耐震基準適用）")
+            parts.append(f"築{age}年（新耐震基準適用）")
         else:
-            parts.append(f"築{2025 - plateau.year_built}年（現行耐震基準適用）")
+            parts.append(f"築{age}年（現行耐震基準適用）")
 
     if plateau.structure_type:
         parts.append(f"構造: {plateau.structure_type}")

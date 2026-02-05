@@ -107,7 +107,7 @@ async def analyze_building(streetview: StreetViewResult) -> RoboflowResult:
             )
 
     except Exception as e:
-        logger.warning(f"Roboflow analysis failed: {e}")
+        logger.warning(f"Roboflow analysis failed: {type(e).__name__}: {e}")
         return RoboflowResult()
 
 
@@ -115,9 +115,9 @@ async def _run_detection(
     client: httpx.AsyncClient,
     image_url: str,
     api_key: str,
-    model: dict,
+    model: dict[str, str],
     image_index: int = 0,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Roboflow APIで1モデルの検出を実行する。
 
     Args:

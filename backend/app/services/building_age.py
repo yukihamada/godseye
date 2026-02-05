@@ -48,7 +48,7 @@ class BuildingAgeResult:
     confidence: str = "low"  # 推定の信頼度 (low/medium/high)
     first_appearance_layer: str | None = None  # 建物が初出現したレイヤー
     first_appearance_period: str | None = None  # 初出現した撮影期間
-    available_layers: list[str] | None = None  # 利用可能だったレイヤー
+    available_layers: list[str] | None = None  # 利用可能だったレイヤー (field with mutable default - use factory in production)
     method: str = "historical_aerial"  # 推定手法
 
 
@@ -184,7 +184,7 @@ async def estimate_building_age(
         return result
 
     except Exception as e:
-        logger.error(f"Building age estimation failed: {e}")
+        logger.error(f"Building age estimation failed at ({lat}, {lng}): {type(e).__name__}: {e}")
         return result
 
 
@@ -203,27 +203,35 @@ async def get_historical_aerial_urls(
     Returns:
         利用可能な時系列画像のURL情報リスト
     """
-    x, y = latlng_to_tile(lat, lng, zoom)
     results = []
 
+    async def check_layer(client: httpx.AsyncClient, layer_info: dict) -> dict | None:
+        actual_zoom = min(zoom, layer_info["zoom_max"])
+        actual_x, actual_y = latlng_to_tile(lat, lng, actual_zoom)
+        tile_url = f"{GSI_TILE_BASE}/{layer_info['layer']}/{actual_zoom}/{actual_x}/{actual_y}.jpg"
+
+        try:
+            resp = await client.head(tile_url, follow_redirects=True)
+            if resp.status_code == 200:
+                return {
+                    "layer": layer_info["layer"],
+                    "year": layer_info["year"],
+                    "period": layer_info["period"],
+                    "url": tile_url,
+                    "zoom": actual_zoom,
+                }
+        except Exception:
+            pass
+        return None
+
     async with httpx.AsyncClient(timeout=15.0) as client:
-        for layer_info in HISTORICAL_LAYERS:
-            actual_zoom = min(zoom, layer_info["zoom_max"])
-            actual_x, actual_y = latlng_to_tile(lat, lng, actual_zoom)
+        tasks = [check_layer(client, layer_info) for layer_info in HISTORICAL_LAYERS]
+        layer_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            tile_url = f"{GSI_TILE_BASE}/{layer_info['layer']}/{actual_zoom}/{actual_x}/{actual_y}.jpg"
+        for layer_info, result in zip(HISTORICAL_LAYERS, layer_results):
+            if isinstance(result, dict):
+                results.append(result)
 
-            try:
-                resp = await client.head(tile_url, follow_redirects=True)
-                if resp.status_code == 200:
-                    results.append({
-                        "layer": layer_info["layer"],
-                        "year": layer_info["year"],
-                        "period": layer_info["period"],
-                        "url": tile_url,
-                        "zoom": actual_zoom,
-                    })
-            except Exception:
-                continue
-
+    # 年代順にソート
+    results.sort(key=lambda x: x["year"])
     return results

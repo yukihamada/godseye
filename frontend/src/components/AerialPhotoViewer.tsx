@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 interface AerialPhotoViewerProps {
   lat: number;
@@ -47,39 +47,61 @@ export default function AerialPhotoViewer({ lat, lng, initialZoom = 18 }: Aerial
   const [availableLayers, setAvailableLayers] = useState<string[]>(["seamlessphoto"]);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasDraggedRef = useRef(false);
 
   // オフセットから実際の座標を計算（1ピクセル = 約0.00001度 at zoom 18）
-  const pixelToDeg = 0.00001 * Math.pow(2, 18 - zoom);
+  const pixelToDeg = useMemo(() => 0.00001 * Math.pow(2, 18 - zoom), [zoom]);
   const adjustedLat = lat - offset.y * pixelToDeg;
   const adjustedLng = lng + offset.x * pixelToDeg;
 
+  // Escapeキーでモーダルを閉じる
+  useEffect(() => {
+    if (!isZoomed) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsZoomed(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isZoomed]);
+
   // 利用可能なレイヤーをチェック
   useEffect(() => {
+    const abortController = new AbortController();
     const checkLayers = async () => {
       const available: string[] = [];
       for (const layer of AERIAL_LAYERS) {
         const url = getLayerTileUrl(layer.id, lat, lng, zoom);
         try {
-          const response = await fetch(url, { method: "HEAD" });
+          const response = await fetch(url, { method: "HEAD", signal: abortController.signal });
           if (response.ok) {
             available.push(layer.id);
           }
-        } catch {
-          // レイヤーが利用不可
+        } catch (e) {
+          // レイヤーが利用不可またはリクエストがキャンセルされた
+          if (e instanceof Error && e.name === "AbortError") {
+            return; // コンポーネントがアンマウントされた
+          }
         }
       }
-      setAvailableLayers(available.length > 0 ? available : ["seamlessphoto"]);
+      if (!abortController.signal.aborted) {
+        setAvailableLayers(available.length > 0 ? available : ["seamlessphoto"]);
+      }
     };
     checkLayers();
+    return () => abortController.abort();
   }, [lat, lng, zoom]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     setIsDragging(true);
+    hasDraggedRef.current = false;
     dragStartRef.current = { x: e.clientX - offset.x, y: e.clientY - offset.y };
   }, [offset]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isDragging) return;
+    hasDraggedRef.current = true;
     const newX = e.clientX - dragStartRef.current.x;
     const newY = e.clientY - dragStartRef.current.y;
     // 移動量を制限
@@ -144,7 +166,7 @@ export default function AerialPhotoViewer({ lat, lng, initialZoom = 18 }: Aerial
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onClick={() => !isDragging && setIsZoomed(true)}
+        onClick={() => !hasDraggedRef.current && setIsZoomed(true)}
       >
         <img
           src={tileUrl}
@@ -220,6 +242,7 @@ export default function AerialPhotoViewer({ lat, lng, initialZoom = 18 }: Aerial
           <button
             className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl transition-colors"
             onClick={() => setIsZoomed(false)}
+            aria-label="閉じる"
           >
             ×
           </button>

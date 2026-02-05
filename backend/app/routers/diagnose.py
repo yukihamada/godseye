@@ -196,10 +196,11 @@ async def diagnose(req: DiagnoseRequest):
     if streetview.available and streetview.image_urls:
         roboflow = await analyze_building(streetview)
 
-    # リスク計算（Roboflow損傷スコア + ML倒壊確率も統合）
+    # リスク計算（Roboflow損傷スコア + ML倒壊確率 + 築年推定も統合）
     risk = calculate_risk(
         plateau, jshis, roboflow,
         footprint_area_m2=plateau.total_floor_area,
+        building_age=building_age,
     )
 
     return DiagnoseResponse(

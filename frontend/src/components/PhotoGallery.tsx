@@ -19,18 +19,6 @@ export default function PhotoGallery({ images, title, icon, onImageSelect }: Pho
   const [isZoomed, setIsZoomed] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // キーボード操作
-  useEffect(() => {
-    if (!isZoomed) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsZoomed(false);
-      if (e.key === "ArrowLeft") navigateImage(-1);
-      if (e.key === "ArrowRight") navigateImage(1);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isZoomed, selectedIndex, images.length]);
-
   const navigateImage = useCallback((delta: number) => {
     setIsAnimating(true);
     setSelectedIndex((prev) => {
@@ -46,6 +34,18 @@ export default function PhotoGallery({ images, title, icon, onImageSelect }: Pho
     setSelectedIndex(index);
     onImageSelect?.(index);
   }, [onImageSelect]);
+
+  // キーボード操作
+  useEffect(() => {
+    if (!isZoomed) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsZoomed(false);
+      if (e.key === "ArrowLeft") navigateImage(-1);
+      if (e.key === "ArrowRight") navigateImage(1);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isZoomed, navigateImage]);
 
   if (images.length === 0) return null;
 
@@ -186,6 +186,7 @@ export default function PhotoGallery({ images, title, icon, onImageSelect }: Pho
           <button
             className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl transition-colors"
             onClick={() => setIsZoomed(false)}
+            aria-label="閉じる"
           >
             ×
           </button>
@@ -195,12 +196,14 @@ export default function PhotoGallery({ images, title, icon, onImageSelect }: Pho
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); navigateImage(-1); }}
+                aria-label="前の画像"
                 className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 text-white text-2xl rounded-full flex items-center justify-center transition-all"
               >
                 ‹
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); navigateImage(1); }}
+                aria-label="次の画像"
                 className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 text-white text-2xl rounded-full flex items-center justify-center transition-all"
               >
                 ›

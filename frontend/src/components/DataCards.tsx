@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { DiagnoseResponse, RoboflowPrediction } from "@/lib/api";
 
 interface DataCardsProps {
@@ -273,6 +273,18 @@ function RoboflowCard({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
 
+  // Escapeキーでモーダルを閉じる
+  useEffect(() => {
+    if (!isZoomed) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsZoomed(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isZoomed]);
+
   // 画像ごとの検出結果を集計
   const predictionsByImage: Map<number, typeof roboflow.predictions> = new Map();
   roboflow.predictions.forEach((p) => {
@@ -436,6 +448,7 @@ function RoboflowCard({
           <button
             className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl transition-colors"
             onClick={() => setIsZoomed(false)}
+            aria-label="閉じる"
           >
             ×
           </button>

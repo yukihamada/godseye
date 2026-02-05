@@ -43,6 +43,8 @@ export default function BuildingSelector({
 
   // キーボード操作
   useEffect(() => {
+    let isLoopRunning = false;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // 入力フィールドでは無効
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -60,15 +62,34 @@ export default function BuildingSelector({
         onBack();
         return;
       }
+
+      // キーが押されたらループ開始
+      if (!isLoopRunning) {
+        isLoopRunning = true;
+        animationFrameRef.current = requestAnimationFrame(processKeys);
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       keyPressedRef.current.delete(e.key.toLowerCase());
+      // 全てのキーが離されたらループ停止
+      if (keyPressedRef.current.size === 0) {
+        isLoopRunning = false;
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+        }
+      }
     };
 
     // 連続キー入力処理
     const processKeys = () => {
       const keys = keyPressedRef.current;
+      if (keys.size === 0) {
+        isLoopRunning = false;
+        return;
+      }
+
       const rad = (heading * Math.PI) / 180;
 
       // WASD / 矢印キーで移動
@@ -99,16 +120,18 @@ export default function BuildingSelector({
         setHeading((prev) => (prev + rotateDelta) % 360);
       }
 
-      animationFrameRef.current = requestAnimationFrame(processKeys);
+      if (isLoopRunning) {
+        animationFrameRef.current = requestAnimationFrame(processKeys);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-    animationFrameRef.current = requestAnimationFrame(processKeys);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      isLoopRunning = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -245,7 +268,8 @@ export default function BuildingSelector({
 
   // Street View URL
   const getStaticUrl = useCallback((h: number, size: string = "200x150") => {
-    return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${roundedLat},${roundedLng}&heading=${h}&fov=90&pitch=5&key=AIzaSyCphrzW-o323Ypju5eOiJws2vwYmE5pIkI`;
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+    return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${roundedLat},${roundedLng}&heading=${h}&fov=90&pitch=5&key=${apiKey}`;
   }, [roundedLat, roundedLng]);
 
   return (
@@ -294,6 +318,7 @@ export default function BuildingSelector({
         <button
           onClick={(e) => { e.stopPropagation(); rotateLeft(); }}
           onMouseDown={(e) => e.stopPropagation()}
+          aria-label="左に回転"
           className="absolute top-1/2 left-2 -translate-y-1/2 w-10 h-10 bg-black/70 hover:bg-black/90 active:scale-95 text-white rounded-full flex items-center justify-center text-lg backdrop-blur-sm transition-all"
         >
           ◀
@@ -301,6 +326,7 @@ export default function BuildingSelector({
         <button
           onClick={(e) => { e.stopPropagation(); rotateRight(); }}
           onMouseDown={(e) => e.stopPropagation()}
+          aria-label="右に回転"
           className="absolute top-1/2 right-2 -translate-y-1/2 w-10 h-10 bg-black/70 hover:bg-black/90 active:scale-95 text-white rounded-full flex items-center justify-center text-lg backdrop-blur-sm transition-all"
         >
           ▶
@@ -319,15 +345,15 @@ export default function BuildingSelector({
         >
           <div className="grid grid-cols-3 gap-0.5">
             <div />
-            <button onClick={moveForward} className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">▲</button>
+            <button onClick={moveForward} aria-label="前進" className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">▲</button>
             <div />
-            <button onClick={moveLeft} className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">◀</button>
+            <button onClick={moveLeft} aria-label="左へ移動" className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">◀</button>
             <div className="w-8 h-8 flex items-center justify-center">
-              <div className="w-2 h-2 bg-blue-500 rounded-full" />
+              <div className="w-2 h-2 bg-blue-500 rounded-full" aria-hidden="true" />
             </div>
-            <button onClick={moveRight} className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">▶</button>
+            <button onClick={moveRight} aria-label="右へ移動" className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">▶</button>
             <div />
-            <button onClick={moveBackward} className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">▼</button>
+            <button onClick={moveBackward} aria-label="後退" className="w-8 h-8 flex items-center justify-center text-white hover:bg-white/20 active:bg-white/30 rounded transition-all text-sm">▼</button>
             <div />
           </div>
         </div>
